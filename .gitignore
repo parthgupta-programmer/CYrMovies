@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+.env
+.DS_Store
+
+# Large datasets and trained artifacts
+/data/ml-32m/*.csv
+/models/*.joblib
+/models/*.pkl
+/models/*.npz
+/models/*.npy
+/models/*.parquet
+/outputs/*.csv
+/outputs/*.json

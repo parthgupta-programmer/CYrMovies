@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+node_modules
+frontend/dist
+outputs/*.csv
+outputs/*.json
+data/ml-32m/*.csv
+models/*.joblib
+models/*.npz
+models/*.parquet

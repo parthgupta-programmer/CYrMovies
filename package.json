@@ -1,0 +1,12 @@
+{
+  "name": "movie-recommender-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": ".venv\\Scripts\\python -m uvicorn app.main:app --reload --port 8000",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "npx concurrently -k -n \"BACKEND,FRONTEND\" -c \"blue,magenta\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build": "npm --prefix frontend run build",
+    "start": ".venv\\Scripts\\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+  }
+}
