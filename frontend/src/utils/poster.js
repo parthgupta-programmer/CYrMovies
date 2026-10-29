@@ -2,19 +2,25 @@
 //  CYrMovie — Poster Utility & Dynamic Fallback Generator
 // ============================================================
 
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/'
+const TMDB_SIZES = { sm: 'w185', md: 'w342', lg: 'w500', xl: 'w780' }
+
 const GENRE_GRADIENTS = {
-  'Action': ['#f97316', '#dc2626'],
-  'Sci-Fi': ['#06b6d4', '#3b82f6'],
+  'Action':    ['#f97316', '#dc2626'],
+  'Sci-Fi':    ['#06b6d4', '#3b82f6'],
   'Adventure': ['#10b981', '#06b6d4'],
-  'Drama': ['#8b5cf6', '#ec4899'],
-  'Thriller': ['#f59e0b', '#ef4444'],
-  'Comedy': ['#84cc16', '#10b981'],
-  'Horror': ['#dc2626', '#18181b'],
-  'Romance': ['#f43f5e', '#a855f7'],
+  'Drama':     ['#8b5cf6', '#ec4899'],
+  'Thriller':  ['#f59e0b', '#ef4444'],
+  'Comedy':    ['#84cc16', '#10b981'],
+  'Horror':    ['#dc2626', '#18181b'],
+  'Romance':   ['#f43f5e', '#a855f7'],
   'Animation': ['#fbbf24', '#f97316'],
-  'Crime': ['#64748b', '#0f172a'],
-  'Fantasy': ['#d946ef', '#8b5cf6'],
-  'Mystery': ['#6366f1', '#4f46e5'],
+  'Crime':     ['#64748b', '#0f172a'],
+  'Fantasy':   ['#d946ef', '#8b5cf6'],
+  'Mystery':   ['#6366f1', '#4f46e5'],
+  'Music':     ['#ec4899', '#f59e0b'],
+  'War':       ['#6b7280', '#374151'],
+  'Western':   ['#d97706', '#92400e'],
 }
 
 function escapeXml(str = '') {
@@ -26,11 +32,25 @@ function escapeXml(str = '') {
     .replace(/'/g, '&apos;')
 }
 
+/**
+ * Build a TMDB image URL from a poster_path or existing partial URL.
+ * The backend returns poster URLs in two forms:
+ *   1. Full URL: "https://image.tmdb.org/t/p/w500/abc123.jpg"
+ *   2. null/undefined — use fallback
+ */
+export function buildTmdbUrl(posterPath, size = 'lg') {
+  if (!posterPath) return null
+  // Already a full URL
+  if (posterPath.startsWith('http')) return posterPath
+  // Partial path like "/abc123.jpg"
+  return `${TMDB_IMAGE_BASE}${TMDB_SIZES[size] || TMDB_SIZES.lg}${posterPath}`
+}
+
 export function getFallbackPoster(title = 'Movie', genres = '') {
   const genreArray = (genres || '').split('|').map(g => g.trim()).filter(Boolean)
   const primaryGenre = genreArray[0] || 'Sci-Fi'
   const [c1, c2] = GENRE_GRADIENTS[primaryGenre] || ['#f97316', '#7c3aed']
-  
+
   // Extract title and year (e.g., "Toy Story (1995)" -> "Toy Story", "1995")
   const rawTitle = (title || 'Unknown Title').replace(/\s*\(\d{4}\)$/, '').trim()
   const yearMatch = (title || '').match(/\((\d{4})\)$/)
@@ -115,9 +135,29 @@ export function getFallbackPoster(title = 'Movie', genres = '') {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
-export function getMoviePoster(movie) {
-  if (movie?.poster && !movie.poster.includes('via.placeholder.com')) {
+/**
+ * Main poster resolver.
+ * Priority: movie.poster (full URL from API) → movie.tmdbId (build URL) → fallback SVG
+ */
+export function getMoviePoster(movie, size = 'lg') {
+  if (!movie) return getFallbackPoster('Movie', '')
+
+  // 1. Direct poster URL from API (already full TMDB or Metahub URL)
+  if (movie.poster && typeof movie.poster === 'string' && movie.poster.startsWith('http')) {
     return movie.poster
   }
+
+  // 2. Poster path / full url from poster_url field
+  if (movie.poster_url && typeof movie.poster_url === 'string' && movie.poster_url.startsWith('http')) {
+    return movie.poster_url
+  }
+
+  // 3. If IMDb ID is available, construct the reliable Metahub image URL
+  if (movie.imdbId && String(movie.imdbId).trim() !== '' && String(movie.imdbId) !== '0') {
+    const cleanImdb = String(movie.imdbId).replace(/^tt/, '').padStart(7, '0')
+    return `https://images.metahub.space/poster/medium/tt${cleanImdb}/img`
+  }
+
+  // 4. Fallback to dynamic neon/cyber SVG poster
   return getFallbackPoster(movie?.title, movie?.genres)
 }

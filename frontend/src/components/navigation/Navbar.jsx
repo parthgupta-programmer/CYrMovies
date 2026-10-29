@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, useScroll, useTransform } from 'framer-motion'
+import { useAuth } from '../../contexts/AuthContext'
 
 const LINKS = [
   { to: '/',         label: 'HOME' },
@@ -14,14 +15,11 @@ export default function Navbar() {
   const bgOpacity = useTransform(scrollY, [0, 80], [0, 0.92])
   const borderOpacity = useTransform(scrollY, [0, 80], [0, 1])
   const navigate = useNavigate()
-
-  const isLoggedIn = !!localStorage.getItem('cyrmovie_token')
+  const { isLoggedIn, logout, user } = useAuth()
 
   const handleLogout = () => {
-    localStorage.removeItem('cyrmovie_token')
-    localStorage.removeItem('cyrmovie_user')
+    logout()
     navigate('/')
-    window.location.reload()
   }
 
   return (

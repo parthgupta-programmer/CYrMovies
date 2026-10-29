@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Union, Dict, Tuple
 import json
 import joblib
 import numpy as np
@@ -86,7 +89,7 @@ def train_als(
         iterations=iterations,
         random_state=random_state,
     )
-    model.fit(user_items.T.tocsr(), show_progress=True)
+    model.fit(user_items, show_progress=True)
     return model
 
 
@@ -117,7 +120,7 @@ def save_artifacts(
     user_items: sp.csr_matrix,
     mappings: Mappings,
     movies: pd.DataFrame,
-    model_dir: str | Path,
+    model_dir: Union[str, Path],
 ) -> None:
     model_dir = Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -132,7 +135,7 @@ def save_artifacts(
     movies.to_parquet(model_dir / "movies.parquet", index=False)
 
 
-def load_artifacts(model_dir: str | Path):
+def load_artifacts(model_dir: Union[str, Path]):
     model_dir = Path(model_dir)
     model = joblib.load(model_dir / "als_model.joblib")
     user_items = sp.load_npz(model_dir / "user_items.npz")

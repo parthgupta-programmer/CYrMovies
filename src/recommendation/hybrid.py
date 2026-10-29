@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Union
 
 import joblib
 import numpy as np
@@ -72,7 +73,7 @@ def hybrid_scores(
     return cf_weight * minmax(cf_scores) + content_weight * minmax(content)
 
 
-def save_tfidf(vectorizer, matrix: sp.csr_matrix, output_dir: str | Path):
+def save_tfidf(vectorizer, matrix: sp.csr_matrix, output_dir: Union[str, Path]):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump(vectorizer, output_dir / "tfidf.joblib", compress=3)

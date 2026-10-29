@@ -79,6 +79,21 @@ export default function MovieCard({ movie, onOpen, onWatchlist, compact = false 
             background: 'linear-gradient(to top, rgba(3,3,3,0.95) 0%, rgba(3,3,3,0.3) 40%, transparent 70%)',
           }} />
 
+          {/* User rating badge if rated */}
+          {movie.user_rating != null && (
+            <div style={{
+              position: 'absolute', top: 8, left: 8,
+              background: 'linear-gradient(135deg, #f97316, #ea580c)',
+              borderRadius: 3, padding: '2px 7px',
+              fontFamily: 'Orbitron', fontSize: '0.6rem', fontWeight: 700,
+              color: '#fff', letterSpacing: '0.08em',
+              boxShadow: '0 0 10px rgba(249,115,22,0.6)',
+              zIndex: 5,
+            }}>
+              ★ {Number(movie.user_rating).toFixed(1)}
+            </div>
+          )}
+
           {/* Score badge */}
           {score !== null && (
             <div style={{

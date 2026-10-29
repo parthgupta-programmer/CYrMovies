@@ -1,43 +1,93 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import GenreSelector from '../components/onboarding/GenreSelector'
 import MovieSelector from '../components/onboarding/MovieSelector'
 import ProfileInitializer from '../components/onboarding/ProfileInitializer'
 import RecommendationGrid from '../components/recommendations/RecommendationGrid'
 import MovieModal from '../components/movies/MovieModal'
+import MovieCard from '../components/movies/MovieCard'
 import HUDFrame from '../components/hud/HUDFrame'
 import EnergyRing from '../components/hud/EnergyRing'
 import Button from '../components/common/Button'
-import { MOCK_RECOMMENDATIONS, USER_PROFILE } from '../data/mockData'
-import { recommendationsAPI } from '../services/api'
+import { MOCK_RECOMMENDATIONS } from '../data/mockData'
+import { recommendationsAPI, moviesAPI, watchlistAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function ForYou() {
+  const { userId, isLoggedIn, user } = useAuth()
   const [phase, setPhase]              = useState('loading') // loading | onboarding | recs
   const [onboardingStep, setStep]      = useState(0)         // 0=genres 1=movies 2=init
   const [selectedGenres, setGenres]    = useState([])
   const [selectedMovies, setMovies]    = useState([])
   const [recs, setRecs]                = useState([])
+  const [profile, setProfile]          = useState(null)
   const [recsLoading, setRecsLoading]  = useState(false)
   const [selectedMovie, setSelected]   = useState(null)
   const [recType, setRecType]          = useState('cold_start')
+  const [notification, setNotification] = useState('')
+  const ratedRailRef                   = useRef(null)
 
-  // On mount: try to load personalized recs for logged-in user
-  useEffect(() => {
-    const tryPersonalized = async () => {
-      try {
-        const data = await recommendationsAPI.forUser(USER_PROFILE.userId, 32)
-        const list = data.recommendations || []
-        if (list.length > 0) {
-          setRecs(list)
-          setRecType('personalized')
-          setPhase('recs')
-          return
-        }
-      } catch { /* user not in model, fall to onboarding */ }
+  // Load user profile & recommendations
+  const loadData = async () => {
+    try {
+      const prof = await moviesAPI.getProfile(userId).catch(() => null)
+      setProfile(prof)
+      setRecsLoading(true)
+      const recData = await recommendationsAPI.forUser(userId, 32).catch(() => ({ recommendations: [] }))
+      const list = recData?.recommendations || []
+      if (list.length > 0) {
+        setRecs(list)
+        setRecType(prof && prof.rating_count > 0 ? 'personalized' : 'collaborative_filtering')
+        setPhase('recs')
+      } else if (!prof || prof.rating_count === 0) {
+        setPhase('onboarding')
+      } else {
+        setPhase('recs')
+      }
+    } catch {
       setPhase('onboarding')
+    } finally {
+      setRecsLoading(false)
     }
-    tryPersonalized()
-  }, [])
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [userId, isLoggedIn])
+
+  const showNotification = (msg) => {
+    setNotification(msg)
+    setTimeout(() => setNotification(''), 3500)
+  }
+
+  const handleRateMovie = async (movieId, rating) => {
+    try {
+      await moviesAPI.rate(userId, movieId, rating)
+      showNotification(`✓ Rating (${rating}★) saved! Updating your cinema profile...`)
+      // Refresh profile and recommendations
+      const [updatedProfile, updatedRecs] = await Promise.all([
+        moviesAPI.getProfile(userId).catch(() => null),
+        recommendationsAPI.forUser(userId, 32).catch(() => ({ recommendations: [] }))
+      ])
+      if (updatedProfile) setProfile(updatedProfile)
+      if (updatedRecs?.recommendations?.length > 0) {
+        setRecs(updatedRecs.recommendations)
+        setRecType('personalized')
+        setPhase('recs')
+      }
+    } catch (err) {
+      console.error('Failed to rate movie:', err)
+    }
+  }
+
+  const handleWatchlist = async (movie) => {
+    try {
+      await watchlistAPI.add(userId, movie.movieId)
+      showNotification(`+ Added "${movie.title}" to Watchlist`)
+    } catch (err) {
+      console.error('Watchlist add failed:', err)
+    }
+  }
 
   const toggleGenre = (name) =>
     setGenres(prev => prev.includes(name) ? prev.filter(g => g !== name) : [...prev, name])
@@ -45,15 +95,30 @@ export default function ForYou() {
   const toggleMovie = (id) =>
     setMovies(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
 
-  // After ProfileInitializer finishes: call cold-start endpoint
+  const scrollRated = (dir) => {
+    if (ratedRailRef.current) {
+      ratedRailRef.current.scrollBy({ left: dir * 240, behavior: 'smooth' })
+    }
+  }
+
+  // After ProfileInitializer finishes: save seed ratings and fetch recs
   const handleInitComplete = async () => {
     setRecsLoading(true)
     setPhase('recs')
     try {
-      const data = await recommendationsAPI.coldStart(selectedGenres, selectedMovies, 32)
-      const list = data.recommendations || []
+      // Save onboarding seed movies as initial ratings (5.0 stars)
+      for (const mid of selectedMovies) {
+        await moviesAPI.rate(userId, mid, 5.0).catch(() => {})
+      }
+      const [prof, data] = await Promise.all([
+        moviesAPI.getProfile(userId).catch(() => null),
+        recommendationsAPI.forUser(userId, 32).catch(() => null)
+      ])
+      setProfile(prof)
+      const list = data?.recommendations || []
       setRecs(list.length > 0 ? list : MOCK_RECOMMENDATIONS.slice(0, 32))
-      setRecType('cold_start')
+      setRecType(prof && prof.rating_count > 0 ? 'personalized' : 'cold_start')
+      showNotification('✓ Cinema Profile calibrated and activated!')
     } catch {
       setRecs(MOCK_RECOMMENDATIONS.slice(0, 32))
       setRecType('cold_start')
@@ -73,89 +138,191 @@ export default function ForYou() {
     )
   }
 
-  // Recommendations phase
+  // Recommendations & Profile phase
   if (phase === 'recs') {
-    const isPersonalized = recType === 'personalized'
-    const topGenres = isPersonalized
-      ? USER_PROFILE.favoriteGenres
-      : selectedGenres.slice(0, 5)
+    const isPersonalized = recType === 'personalized' || (profile && profile.rating_count > 0)
+    const ratedMovies = profile?.rated_movies || []
+    const topGenres = profile?.favorite_genres?.length > 0
+      ? profile.favorite_genres
+      : (selectedGenres.length > 0 ? selectedGenres.slice(0, 5) : ['Sci-Fi', 'Action', 'Drama'])
 
     return (
       <div style={{ paddingTop: 64 }}>
+        {/* Floating Notification */}
+        <AnimatePresence>
+          {notification && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              style={{
+                position: 'fixed', top: 76, right: 24, zIndex: 9999,
+                background: 'rgba(10,10,15,0.95)', border: '1px solid #f97316',
+                padding: '0.65rem 1.2rem', borderRadius: 4,
+                boxShadow: '0 0 20px rgba(249,115,22,0.4)',
+                fontFamily: 'Orbitron', fontSize: '0.65rem', color: '#f1f5f9',
+                letterSpacing: '0.1em',
+              }}
+            >
+              {notification}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Header */}
-        <div style={{ padding: '4rem 2rem 2rem', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ padding: '3.5rem 2rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
           <div className="grid-overlay" />
           <div className="container" style={{ position: 'relative', zIndex: 1 }}>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <div style={{ fontFamily: 'Orbitron', fontSize: '0.6rem', letterSpacing: '0.3em', color: 'rgba(249,115,22,0.6)', marginBottom: '0.5rem' }}>
-                FOR YOU
+                FOR YOU & PROFILE
               </div>
-              <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.5rem' }}>
-                Your Cinema <span style={{ color: '#f97316', textShadow: '0 0 20px rgba(249,115,22,0.4)' }}>Profile</span>
-              </h1>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>
-                {isPersonalized
-                  ? 'Personalized from your rating history using collaborative filtering + content matching.'
-                  : 'Content-based recommendations from your selected genres and movies.'}
-              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 700, color: '#f1f5f9', marginBottom: '0.5rem' }}>
+                    Your Cinema <span style={{ color: '#f97316', textShadow: '0 0 20px rgba(249,115,22,0.4)' }}>Profile</span>
+                  </h1>
+                  <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.9rem', maxWidth: 650 }}>
+                    {isPersonalized
+                      ? `Trained on your ${ratedMovies.length} movie rating${ratedMovies.length !== 1 ? 's' : ''}. Every new rating recalculates your personalized recommendations.`
+                      : 'Content-based recommendations generated from your onboarding selections.'}
+                  </p>
+                </div>
+                <Button size="sm" variant="secondary" onClick={() => { setStep(0); setPhase('onboarding') }}>
+                  RE-CALIBRATE PREFERENCES
+                </Button>
+              </div>
             </motion.div>
           </div>
         </div>
 
-        {/* Profile stats */}
-        <div className="container" style={{ padding: '1.5rem 0' }}>
-          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-            <HUDFrame label="MATCH ACCURACY" style={{ padding: '1.5rem', flex: '0 0 auto' }}>
-              <EnergyRing size={100} value={isPersonalized ? USER_PROFILE.matchAccuracy / 100 : 0.72} label="MATCH" delay={0.3} />
+        {/* Profile stats HUD */}
+        <div className="container" style={{ padding: '1rem 0 2rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.2rem' }}>
+            <HUDFrame label="MATCH ACCURACY" style={{ padding: '1.2rem' }}>
+              <EnergyRing size={88} value={ratedMovies.length > 0 ? Math.min(0.96, 0.70 + ratedMovies.length * 0.05) : 0.75} label="MATCH" delay={0.2} />
             </HUDFrame>
-            <HUDFrame label="GENRE PROFILE" style={{ padding: '1.5rem', flex: 1, minWidth: 200 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+
+            <HUDFrame label="RATING METRICS" style={{ padding: '1.2rem' }}>
+              <div style={{ fontFamily: 'Orbitron', fontSize: '1.8rem', fontWeight: 700, color: '#f97316', textShadow: '0 0 10px rgba(249,115,22,0.4)' }}>
+                {ratedMovies.length}
+              </div>
+              <div style={{ fontFamily: 'Orbitron', fontSize: '0.55rem', letterSpacing: '0.15em', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                FILMS RATED IN PROFILE
+              </div>
+              <div style={{ marginTop: '0.8rem', fontSize: '0.8rem', color: '#fbbf24', fontFamily: 'Orbitron' }}>
+                ★ {profile?.avg_rating || '5.0'} <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.35)' }}>AVG SCORE</span>
+              </div>
+            </HUDFrame>
+
+            <HUDFrame label="TASTE PROFILE" style={{ padding: '1.2rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.6rem' }}>
                 {topGenres.map(g => (
                   <span key={g} style={{
-                    fontFamily: 'Orbitron', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em',
+                    fontFamily: 'Orbitron', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.1em',
                     color: '#f97316', background: 'rgba(249,115,22,0.08)',
-                    border: '1px solid rgba(249,115,22,0.25)', padding: '4px 12px',
+                    border: '1px solid rgba(249,115,22,0.25)', padding: '3px 8px', borderRadius: 2,
                   }}>
                     {g}
                   </span>
                 ))}
               </div>
-              <div style={{ marginTop: '0.75rem', fontFamily: 'Orbitron', fontSize: '0.58rem', letterSpacing: '0.15em', color: 'rgba(255,255,255,0.3)' }}>
-                {isPersonalized
-                  ? `${USER_PROFILE.ratingCount} RATINGS IN PROFILE`
-                  : `${selectedMovies.length} SEED FILMS SELECTED`}
-              </div>
-              <div style={{ marginTop: '0.4rem', fontFamily: 'Orbitron', fontSize: '0.52rem', letterSpacing: '0.1em', color: 'rgba(249,115,22,0.4)' }}>
-                {isPersonalized ? 'CF + CONTENT HYBRID' : 'CONTENT-BASED (COLD START)'}
+              <div style={{ fontFamily: 'Orbitron', fontSize: '0.52rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.3)' }}>
+                DYNAMIC ALS + TF-IDF ENGINE ACTIVE
               </div>
             </HUDFrame>
           </div>
         </div>
 
-        {/* Recommendation grid — 32 movies, 4 per row */}
+        {/* Section: Your Rated Films Rail */}
+        {ratedMovies.length > 0 && (
+          <section style={{ padding: '1rem 0 3rem' }}>
+            <div className="container">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1.2rem' }}>
+                <div>
+                  <div style={{ fontFamily: 'Orbitron', fontSize: '0.55rem', letterSpacing: '0.25em', color: '#f97316', marginBottom: '0.25rem' }}>
+                    SAVED RATINGS
+                  </div>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f1f5f9' }}>
+                    Your Rated Films ({ratedMovies.length})
+                  </h2>
+                </div>
+                {ratedMovies.length > 3 && (
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => scrollRated(-1)}
+                      style={{
+                        width: 32, height: 32, background: 'rgba(249,115,22,0.08)',
+                        border: '1px solid rgba(249,115,22,0.3)', color: '#f97316',
+                        cursor: 'pointer', fontSize: '0.75rem',
+                      }}
+                    >
+                      ◀
+                    </button>
+                    <button
+                      onClick={() => scrollRated(1)}
+                      style={{
+                        width: 32, height: 32, background: 'rgba(249,115,22,0.08)',
+                        border: '1px solid rgba(249,115,22,0.3)', color: '#f97316',
+                        cursor: 'pointer', fontSize: '0.75rem',
+                      }}
+                    >
+                      ▶
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div
+                ref={ratedRailRef}
+                style={{
+                  display: 'flex',
+                  gap: '1.2rem',
+                  overflowX: 'auto',
+                  paddingBottom: '1rem',
+                  paddingTop: '0.5rem',
+                  scrollbarWidth: 'thin',
+                }}
+              >
+                {ratedMovies.map(movie => (
+                  <div key={movie.movieId} style={{ position: 'relative' }}>
+                    <MovieCard
+                      movie={movie}
+                      onOpen={setSelected}
+                      onWatchlist={handleWatchlist}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Section: Recommendation grid */}
         <RecommendationGrid
           movies={recs}
           loading={recsLoading}
           onOpen={setSelected}
-          onWatchlist={() => {}}
-          title={isPersonalized ? 'Personalized For You' : 'Based On Your Taste'}
-          subtitle={`${recs.length} recommendations generated from ${isPersonalized ? 'your collaborative + content profile' : 'your genre & film selections'}`}
-          label={isPersonalized ? 'PERSONALIZED FOR YOU' : 'COLD START RECOMMENDATIONS'}
+          onWatchlist={handleWatchlist}
+          title={isPersonalized ? 'Recommended For You' : 'Based On Your Preferences'}
+          subtitle={`${recs.length} recommendations calculated from your profile ratings.`}
+          label={isPersonalized ? 'PERSONALIZED PICKS' : 'COLD START PICKS'}
         />
 
+        {/* Movie Detail Modal */}
         {selectedMovie && (
           <MovieModal
             movie={selectedMovie}
             onClose={() => setSelected(null)}
-            onWatchlist={() => {}}
-            onRate={() => {}}
+            onWatchlist={handleWatchlist}
+            onRate={handleRateMovie}
           />
         )}
       </div>
     )
   }
 
-  // Onboarding flow
+  // Onboarding flow (for new users without ratings)
   return (
     <div style={{ paddingTop: 64 }}>
       <div style={{ padding: '4rem 2rem', position: 'relative', overflow: 'hidden', minHeight: '100vh' }}>
@@ -223,7 +390,7 @@ export default function ForYou() {
                     Pick Films <span style={{ color: '#f97316' }}>You Love</span>
                   </h2>
                   <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.9rem' }}>
-                    Select 3–5 films. This seeds your recommendation engine.
+                    Select 3–5 films. They will be saved to your profile to seed recommendations.
                   </p>
                 </div>
                 <MovieSelector selected={selectedMovies} onToggle={toggleMovie} max={5} />

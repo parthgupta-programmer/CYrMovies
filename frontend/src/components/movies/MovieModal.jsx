@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import HUDFrame from '../hud/HUDFrame'
 import MovieRating from './MovieRating'
 import Button from '../common/Button'
@@ -8,7 +9,9 @@ import { getMoviePoster, getFallbackPoster } from '../../utils/poster'
 
 export default function MovieModal({ movie, onClose, onWatchlist, onRate }) {
   const [imgError, setImgError] = useState(false)
-  const [rated, setRated] = useState(false)
+  const [currentRating, setCurrentRating] = useState(movie?.user_rating || null)
+  const [rated, setRated] = useState(!!movie?.user_rating)
+  const navigate = useNavigate()
 
   if (!movie) return null
 
@@ -17,8 +20,9 @@ export default function MovieModal({ movie, onClose, onWatchlist, onRate }) {
   const score     = movie?.score ?? null
 
   const handleRate = (r) => {
-    onRate?.(movie.movieId, r)
+    setCurrentRating(r)
     setRated(true)
+    onRate?.(movie.movieId, r)
   }
 
   return (
@@ -158,36 +162,43 @@ export default function MovieModal({ movie, onClose, onWatchlist, onRate }) {
               )}
 
               {/* Rating */}
-              {!rated ? (
-                <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: '0.6rem',
+                }}>
                   <div style={{
                     fontFamily: 'Orbitron', fontSize: '0.6rem', letterSpacing: '0.2em',
-                    color: 'rgba(255,255,255,0.4)', marginBottom: '0.6rem',
+                    color: 'rgba(255,255,255,0.5)',
                   }}>
-                    RATE THIS FILM
+                    {currentRating ? `YOUR RATING: ★ ${Number(currentRating).toFixed(1)}` : 'RATE THIS FILM'}
                   </div>
-                  <MovieRating onRate={handleRate} />
+                  {rated && (
+                    <motion.span
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      style={{
+                        fontFamily: 'Orbitron', fontSize: '0.58rem', letterSpacing: '0.15em',
+                        color: '#f97316', fontWeight: 700,
+                      }}
+                    >
+                      ✓ SAVED TO PROFILE
+                    </motion.span>
+                  )}
                 </div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  style={{
-                    marginBottom: '1.5rem',
-                    fontFamily: 'Orbitron', fontSize: '0.65rem', letterSpacing: '0.2em',
-                    color: '#f97316', textTransform: 'uppercase',
-                    padding: '0.5rem 1rem', border: '1px solid rgba(249,115,22,0.3)',
-                    display: 'inline-block',
-                  }}
-                >
-                  ✓ PROFILE UPDATED
-                </motion.div>
-              )}
+                <MovieRating onRate={handleRate} initialRating={currentRating ? Math.round(Number(currentRating)) : 0} />
+              </div>
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 <Button size="sm" onClick={() => onWatchlist?.(movie)}>
                   + WATCHLIST
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => {
+                  onClose?.()
+                  navigate(`/similar/${movie.movieId}`, { state: { movie } })
+                }}>
+                  SIMILAR FILMS
                 </Button>
                 <Button size="sm" variant="secondary" onClick={onClose}>
                   CLOSE

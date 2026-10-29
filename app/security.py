@@ -1,11 +1,16 @@
-from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import os
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
+from dotenv import load_dotenv
 from jose import jwt
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-this-in-production")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
+JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY", "change-this-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_MINUTES = int(os.getenv("JWT_MINUTES", "120"))
 

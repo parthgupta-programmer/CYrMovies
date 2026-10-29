@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useLocation, NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import RecommendationGrid from '../components/recommendations/RecommendationGrid'
@@ -7,11 +7,12 @@ import HUDFrame from '../components/hud/HUDFrame'
 import Button from '../components/common/Button'
 import { recommendationsAPI, moviesAPI, watchlistAPI } from '../services/api'
 import { getMoviePoster, getFallbackPoster } from '../utils/poster'
-import { USER_PROFILE } from '../data/mockData'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function SimilarMovies() {
   const { movieId } = useParams()
   const location = useLocation()
+  const { userId } = useAuth()
 
   const [seedMovie, setSeedMovie]   = useState(location.state?.movie || null)
   const [recs, setRecs]             = useState([])
@@ -38,7 +39,7 @@ export default function SimilarMovies() {
   }, [movieId])
 
   const handleWatchlist = (movie) => {
-    watchlistAPI.add(USER_PROFILE.userId, movie.movieId).catch(() => {})
+    watchlistAPI.add(userId, movie.movieId).catch(() => {})
   }
 
   const seedGenres = (seedMovie?.genres || '').split('|').filter(Boolean)
@@ -123,7 +124,7 @@ export default function SimilarMovies() {
           movie={selectedMovie}
           onClose={() => setSelectedMovie(null)}
           onWatchlist={handleWatchlist}
-          onRate={() => {}}
+          onRate={(id, r) => moviesAPI.rate(userId, id, r).catch(() => {})}
         />
       )}
     </div>

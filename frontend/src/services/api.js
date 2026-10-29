@@ -1,5 +1,5 @@
-﻿// ============================================================
-//  CYrMovie — API Service Layer
+// ============================================================
+//  CYrMovie — API Service Layer (Enhanced)
 // ============================================================
 
 const BASE_URL = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api/v1'
@@ -27,15 +27,28 @@ export const authAPI = {
     request('POST', '/auth/register', { name, email, password }),
   login: (email, password) =>
     request('POST', '/auth/login', { email, password }),
-  me: () => request('GET', '/auth/me'),
+  me: (userId) => request('GET', userId ? `/auth/me?user_id=${userId}` : '/auth/me'),
 }
 
 // ---- Movies (FLOW A: Search only — no recommendation logic) ----
 export const moviesAPI = {
   search:  (q, limit = 20) => request('GET', `/movies/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   getById: (id)             => request('GET', `/movies/${id}`),
+  trending: (n = 20)        => request('GET', `/movies/trending?n=${n}`),
+  browse:  (genre = null, limit = 32, offset = 0) => {
+    const params = new URLSearchParams({ limit, offset })
+    if (genre) params.set('genre', genre)
+    return request('GET', `/movies/browse?${params}`)
+  },
+  byGenre: (genre, n = 20) => request('GET', `/movies/by-genre?genre=${encodeURIComponent(genre)}&n=${n}`),
   rate:    (userId, movieId, rating) =>
     request('POST', '/ratings', { user_id: userId, movie_id: movieId, rating }),
+  getRatings: (userId) =>
+    request('GET', `/ratings?user_id=${userId}`),
+  deleteRating: (userId, movieId) =>
+    request('DELETE', `/ratings/${movieId}?user_id=${userId}`),
+  getProfile: (userId) =>
+    request('GET', `/user/profile?user_id=${userId}`),
   addInteraction: (userId, movieId, type) =>
     request('POST', '/interactions', { user_id: userId, movie_id: movieId, interaction_type: type }),
 }
@@ -49,6 +62,9 @@ export const recommendationsAPI = {
   // FLOW C: Personalized CF + content for logged-in user
   forUser: (userId, n = 32) =>
     request('GET', `/recommendations/for-you?user_id=${userId}&n=${n}`),
+
+  refresh: (userId, n = 20) =>
+    request('GET', `/recommendations/refresh?user_id=${userId}&n=${n}`),
 
   // FLOW D: Cold-start from onboarding preferences
   coldStart: (genres, seedMovieIds, n = 32) =>
@@ -65,7 +81,8 @@ export const recommendationsAPI = {
 // ---- Watchlist ----
 export const watchlistAPI = {
   add:    (userId, movieId) => request('POST', '/watchlist', { user_id: userId, movie_id: movieId }),
-  getAll: ()                => request('GET', '/watchlist'),
+  getAll: (userId = 1)      => request('GET', `/watchlist?user_id=${userId}`),
+  remove: (userId, movieId) => request('DELETE', `/watchlist/${movieId}?user_id=${userId}`),
 }
 
 // ---- Health ----

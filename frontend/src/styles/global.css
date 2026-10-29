@@ -249,3 +249,34 @@ img { display: block; max-width: 100%; }
 @media (min-width: 769px) {
   .hide-desktop { display: none !important; }
 }
+
+/* ============================================================
+   Genre Rail scrollbar hiding
+   ============================================================ */
+.genre-rail::-webkit-scrollbar { display: none; }
+.genre-rail { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Skeleton pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Shimmer for skeleton loading */
+@keyframes shimmer-full {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(249,115,22,0.06) 37%, rgba(255,255,255,0.04) 63%);
+  background-size: 400px 100%;
+  animation: shimmer-full 1.4s ease infinite;
+}
+
+/* Responsive 2-column hero on mobile */
+@media (max-width: 900px) {
+  .hero-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

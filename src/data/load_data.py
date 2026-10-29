@@ -1,15 +1,18 @@
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Union
 import pandas as pd
 
 
-def load_movies(path: str | Path) -> pd.DataFrame:
+def load_movies(path: Union[str, Path]) -> pd.DataFrame:
     return pd.read_csv(
         path,
         dtype={"movieId": "int32", "title": "string", "genres": "string"},
     )
 
 
-def load_ratings(path: str | Path) -> pd.DataFrame:
+def load_ratings(path: Union[str, Path]) -> pd.DataFrame:
     return pd.read_csv(
         path,
         usecols=["userId", "movieId", "rating", "timestamp"],
@@ -23,14 +26,14 @@ def load_ratings(path: str | Path) -> pd.DataFrame:
     )
 
 
-def load_links(path: str | Path) -> pd.DataFrame:
+def load_links(path: Union[str, Path]) -> pd.DataFrame:
     return pd.read_csv(
         path,
         dtype={"movieId": "int32", "imdbId": "Int32", "tmdbId": "Int32"},
     )
 
 
-def load_tags(path: str | Path) -> pd.DataFrame:
+def load_tags(path: Union[str, Path]) -> pd.DataFrame:
     return pd.read_csv(
         path,
         usecols=["userId", "movieId", "tag"],

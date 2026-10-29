@@ -4,10 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import HUDFrame from '../components/hud/HUDFrame'
 import Button from '../components/common/Button'
 import { authAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Auth() {
   const [params]   = useSearchParams()
   const navigate   = useNavigate()
+  const { login }  = useAuth()
   const initMode   = params.get('mode') === 'signup' ? 'signup' : 'login'
 
   const [mode,    setMode]    = useState(initMode)
@@ -24,7 +26,7 @@ export default function Auth() {
     setLoading(true)
     try {
       if (mode === 'signup') {
-        await authAPI.register(form.name, form.email, form.password)
+        const data = await authAPI.register(form.name, form.email, form.password)
         setSuccess(true)
         setTimeout(() => {
           setMode('login')
@@ -32,8 +34,8 @@ export default function Auth() {
         }, 1500)
       } else {
         const data = await authAPI.login(form.email, form.password)
-        localStorage.setItem('cyrmovie_token', data.access_token || 'mock_token')
-        localStorage.setItem('cyrmovie_user',  JSON.stringify(data.user || { email: form.email }))
+        const userData = { user_id: data.user_id, name: form.email.split('@')[0], email: form.email }
+        login(userData, data.access_token || 'auth_token')
         navigate('/')
       }
     } catch (err) {
@@ -45,8 +47,7 @@ export default function Auth() {
 
   // Use demo login (no real backend required)
   const demoLogin = () => {
-    localStorage.setItem('cyrmovie_token', 'demo_token_123')
-    localStorage.setItem('cyrmovie_user',  JSON.stringify({ name: 'Cyrus', email: 'cyrus@cyrmovie.ai' }))
+    login({ user_id: 1, name: 'Cyrus', email: 'cyrus@cyrmovie.ai' }, 'demo_token_123')
     navigate('/')
   }
 
