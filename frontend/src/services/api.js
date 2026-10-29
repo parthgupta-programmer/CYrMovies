@@ -2,7 +2,11 @@
 //  CYrMovie — API Service Layer (Enhanced)
 // ============================================================
 
-const BASE_URL = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api/v1'
+const BASE_URL = import.meta.env.VITE_API_BASE || (
+  typeof window !== 'undefined' && window.location.port !== '5173'
+    ? '/api/v1'
+    : 'http://127.0.0.1:8000/api/v1'
+)
 
 function getAuthHeaders() {
   const token = localStorage.getItem('cyrmovie_token')
