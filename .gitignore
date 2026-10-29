@@ -27,7 +27,6 @@ data/local.db
 # Node & Frontend
 node_modules/
 frontend/node_modules/
-frontend/dist/
 dist/
 .vite/
 npm-debug.log*
